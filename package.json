@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon delay 2 index.js --ignore 'results.json'"
+    "start": "nodemon src/index.js --ignore '*.json'"
   },
   "author": "",
   "license": "ISC",
