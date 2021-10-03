@@ -1,2 +1,2 @@
-var fetch = require('./fetch');
-fetch.storeHistoryDetails()
+const fetch = require("./fetch");
+fetch.storeHistoryDetails();
