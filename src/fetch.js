@@ -1,115 +1,112 @@
 const tools = require("./tools");
 const axios = require("axios");
 const cheerio = require("cheerio");
-const armsDealerURL = "https://my.callofduty.com/player/store/sku/400039/title/mw";
-const details = [];
-const showcases = [];
 const finishers = [];
+const showcases = [];
+const details = [];
+// const armsDealerURL = "https://my.callofduty.com/player/store/sku/400039/title/mw";
 
 /**
  * @brief fetch all finishers from codtracker.gg page by page using recursion,
  * and saves them in the finishers array and writes the same object in finishers.json
- * @param {boolean} verbose option to increase logs, default false
  * @param {number} index first page index, default 1
  */
-async function fetchFinishers(verbose = false, index = 1) {
-  const finishersURL = "https://cod.tracker.gg/modern-warfare/db/loot?c=9&page=" + index;
-  axios(finishersURL)
+async function fetchFinishers(index = 1, handler = finishersHandler) {
+  return new Promise(() => {
+    const finishersURL = "https://cod.tracker.gg/modern-warfare/db/loot?c=9&page=" + index;
+    axios(finishersURL)
+      .then(function (response) {
+        const html = response.data;
+        const $ = cheerio.load(html);
+        const found = $("table tbody tr", html);
+        if (found.length === 0) {
+          return handler("Found " + finishers.length + " finishers (" + (index - 1) + " pages)");
+        } else {
+          found.each(function () {
+            finishers.push({
+              id: finishers.length,
+              title: $(this).find(".item-details__name").text(),
+            });
+          });
+          fetchFinishers(index + 1);
+        }
+      })
+      .catch((e) => console.log(e));
+  });
+}
+
+/**
+ * @brief fetch all storeDay href entries for every day of the COD Store,
+ * page by page using recursion, and saves them in the showcases array and showcases.json
+ * @param {number} index first store history page index, default 1 (most recent showcases)
+ */
+async function fetchStoreHistory(index = 1, handler = storeHistoryHandler) {
+  return new Promise(() => {
+    axios("https://codmwstore.com/category/store/page/" + index)
+      .then(function (response) {
+        const html = response.data;
+        const $ = cheerio.load(html);
+        const found = $(".entry-title", html);
+        if (found.length !== 0) {
+          found.each(function () {
+            showcases.push({ id: showcases.length, url: $(this).find("a").attr("href") });
+          });
+          fetchStoreHistory(index + 1, handler);
+        }
+      })
+      .catch(() => handler("Found " + showcases.length + " showcases (" + (index - 1) + " pages)"));
+  });
+}
+
+/**
+ * @brief after running fetch store history, a different handler which will investigate every showcase
+ * and gather all the bundle urls and save them on the details array and details.json
+ * @param {number} index first store history page index, default 1
+ */
+async function fetchStoreHistoryDetails(index = 1, handler = storeHistoryDetailsHandler) {
+  fetchStoreHistory(index, handler);
+}
+
+// @@ Handlers
+async function finishersHandler(message) {
+  console.log(message);
+  tools.toJsonFile(finishers, "finishers.json");
+  return finishers;
+}
+
+async function storeHistoryHandler(message) {
+  console.log(message);
+  tools.toJsonFile(showcases, "showcases.json");
+  return showcases;
+}
+
+async function storeHistoryDetailsHandler(message) {
+  console.log(message);
+  getBundle(0, (msg) => {
+    console.log(msg);
+    tools.toJsonFile(details, "details.json");
+    return details;
+  });
+}
+
+async function getBundle(showcaseIndex, handler) {
+  const showcase = showcases[showcaseIndex];
+  axios(showcase.url)
     .then(function (response) {
+      console.log("Parsing showcase " + (showcaseIndex + 1));
+      const bundles = [];
       const html = response.data;
       const $ = cheerio.load(html);
-      const found = $("table tbody tr", html);
-      if (found.length === 0) {
-        console.log("Found " + finishers.length + " finishers");
-        tools.toJsonFile(finishers, "finishers.json");
-      } else {
-        found.each(function () {
-          const title = $(this).find(".item-details__name").text();
-          finishers.push({ id: finishers.length, title: title });
-        });
-        if (verbose) console.log("Page " + index + " done");
-        fetchFinishers(verbose, index + 1);
-      }
+      const found = $("a", html).toArray();
+      const urls = found.map((item) => $(item).attr("href"));
+
+      urls.forEach((value) => bundles.push({ url: value }));
+      details.push({ id: details.length, bundles: bundles });
+
+      if (showcaseIndex + 1 !== showcases.length) getBundle(showcaseIndex + 1);
+      else handler("Parsed all " + showcases.length + "showcases");
     })
-    .catch((e) => console.error(e));
-}
-
-/**
- * @brief fetch all storeDay href entries for every day of the COD Store,
- * page by page using recursion, and saves them in the showcases array and showcases.json
- * @param {boolean} verbose option to increase logs, default false
- * @param {number} index first page index, default 1 (most recent showcases)
- */
-async function fetchStoreHistory(verbose = false, index = 1) {
-  const storeHistoryURL = "https://codmwstore.com/category/store/page/" + index;
-  axios(storeHistoryURL)
-    .then(function (response) {
-      let html = response.data;
-      let $ = cheerio.load(html);
-      let found = $(".entry-title", html);
-
-      if (found.length !== 0) {
-        found.each(() => {
-          let storeDayURL = $(this).find("a").attr("href");
-          showcases.push({ id: showcases.length, url: storeDayURL });
-        });
-        if (verbose) console.log("Page " + index + " done");
-        fetchStoreHistory(verbose, index + 1);
-      }
-    })
-    .catch(() => {
-      console.log("Found " + showcases.length + " showcases");
-      tools.toJsonFile(showcases, "showcases.json");
-    });
-}
-
-/**
- * @brief fetch all storeDay href entries for every day of the COD Store,
- * page by page using recursion, and saves them in the showcases array and showcases.json
- * @param {boolean} verbose option to increase logs, default true
- * @param {number} index first page index, default 1
- */
-async function fetchStoreHistoryDetails(verbose = false, index = 1) {
-  const storeHistoryURL = "https://codmwstore.com/category/store/page/" + index;
-  axios(storeHistoryURL)
-    .then(function (response) {
-      let html = response.data;
-      let $ = cheerio.load(html);
-      let found = $(".entry-title", html);
-
-      if (found.length !== 0) {
-        found.each(function () {
-          let storeDayURL = $(this).find("a").attr("href");
-          showcases.push({ id: showcases.length, url: storeDayURL });
-        });
-        if (verbose) console.log("Page " + index + " done");
-        fetchStoreHistoryDetails(verbose, index + 1);
-      }
-    })
-    .catch(function () {
-      console.log("Found " + showcases.length + " showcases");
-      showcases.forEach((storeDay) => {
-        axios(storeDay.url).then(function (response) {
-          let html = response.data;
-          let $ = cheerio.load(html);
-          let found = $("div.entry-content-wrap", html);
-          let bundles = [];
-
-          found.each(function (i, e) {
-            $(this)
-              .find("a")
-              .each(function (j, element) {
-                let url = $(element).attr("href");
-                console.log("\t" + j + "|" + url);
-                bundles.push({ id: bundles.length, url: url });
-              });
-          });
-
-          details.push({ id: details.length, bundles: bundles });
-        });
-      });
-      tools.toJsonFile(details, "details.json");
-    });
+    .catch((e) => console.log(e));
 }
 
 // @@ Exports
