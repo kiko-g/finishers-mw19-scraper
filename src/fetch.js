@@ -81,9 +81,9 @@ async function storeHistoryHandler(message) {
 }
 
 async function storeHistoryDetailsHandler(message) {
-  console.log(message);
-  getBundle(0, (msg) => {
-    console.log(msg);
+  storeHistoryHandler(message);
+  getBundle(0, (messag) => {
+    console.log(messag);
     tools.toJsonFile(details, "details.json");
     return details;
   });
@@ -93,18 +93,20 @@ async function getBundle(showcaseIndex, handler) {
   const showcase = showcases[showcaseIndex];
   axios(showcase.url)
     .then(function (response) {
-      console.log("Parsing showcase " + (showcaseIndex + 1));
+      tools.printProgress(
+        parseFloat((100.0 * (showcaseIndex + 1)) / showcases.length).toFixed(2),
+        "Parsing showcase " + (showcaseIndex + 1) + "/" + showcases.length + " (",
+        ")"
+      );
       const bundles = [];
       const html = response.data;
       const $ = cheerio.load(html);
-      const found = $("a", html).toArray();
+      const found = $("article a", html).toArray();
       const urls = found.map((item) => $(item).attr("href"));
-
-      urls.forEach((value) => bundles.push({ url: value }));
+      urls.forEach((value) => bundles.push(value));
       details.push({ id: details.length, bundles: bundles });
-
-      if (showcaseIndex + 1 !== showcases.length) getBundle(showcaseIndex + 1);
-      else handler("Parsed all " + showcases.length + "showcases");
+      if (showcaseIndex + 1 !== showcases.length) getBundle(showcaseIndex + 1, handler);
+      else handler("\nParsed all " + showcases.length + " showcases");
     })
     .catch((e) => console.log(e));
 }

@@ -1,4 +1,4 @@
 const fetch = require("./fetch");
 // fetch.finishers();
 // fetch.storeHistory();
-fetch.storeHistory();
+fetch.storeHistoryDetails();
